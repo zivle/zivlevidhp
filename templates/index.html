@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html>
+   <head>
+      <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyA_UBzU2-Wk3047IfY7pe2G4WGK-iuFiRw&callback=initMap" async defer></script>
+      <script type="text/javascript" src="https://code.jquery.com/jquery-latest.min.js"></script>
+      <script type="text/javascript" src="https://cdn.rawgit.com/suchg/google.map_markers_multi/master/jquery.ajaxQueue.js"></script>
+      <style>
+         #myBtn {
+         background-color: #4CAF50;
+         border: none;
+         color: white;
+         padding: 15px 32px;
+         text-align: center;
+         text-decoration: none;
+         display: inline-block;
+         font-size: 16px;
+         margin: 4px 2px;
+         cursor: pointer;
+         border-radius: .5em;
+         }
+         .fileContainer {
+         background: #4CAF50;
+         border-radius: .5em;
+         float: left;
+         padding: 15px 32px;
+         color: white;
+         margin: 4px 2px;
+         }
+         .fileContainer [type='file'] {
+         cursor: inherit;
+         display: block;
+         font-size: 100px;
+         filter: alpha(opacity=0);
+         min-height: 1%;
+         min-width: 1%;
+         opacity: 0;
+         position: absolute;
+         right: 0;
+         text-align: right;
+         top: 0;
+         cursor: pointer;
+         }
+         #map {
+         height: 600px;
+         width: 100%;
+         }
+      </style>
+   </head>
+   <body>
+      <h3>Show Locations from Books</h3>
+      <div id="progress"></div>
+      <span>Added markers count</span>:<span id="totalAddedMarker"></span>
+      <div id="map"></div>
+      <button id="myBtn">reset map</button>
+      <label class="fileContainer">
+      upload file
+      <input id="fileuploader" type='file' accept='text/json' onchange='openFile(event)'><br>
+      </label>
+      <div id="mytext"></div>
+      <script>
+         var map;
+         var geocoder;
+         var queuCounter;
+         var setLimit;
+         var totalAddedMarkers;
+         var errorArray;
+         
+         function initMap() {
+             map = new google.maps.Map(document.getElementById('map'), {
+                 center: {lat: 0, lng: 0},
+                 zoom: 3
+             });
+             geocoder = new google.maps.Geocoder();
+             queuCounter = 0;
+             setLimit = 20;
+             totalAddedMarkers = 0;
+             errorArray = [];
+         }
+         
+         document.getElementById("myBtn").addEventListener("click", function() {
+             document.getElementById("progress").innerHTML = "";
+             document.getElementById("fileuploader").value = "";
+             initMap();
+         }, true);
+         
+           //will fire 20 ajax request at a time and other will keep in queue
+         
+         //keep count of added markers and update at top
+         
+         
+         //function to get random element from an array
+         (function($) {
+         $.rand = function(arg) {
+            if ($.isArray(arg)) {
+                return arg[$.rand(arg.length)];
+            } else if (typeof arg === "number") {
+                return Math.floor(Math.random() * arg);
+            } else {
+                return 4;  // chosen by fair dice roll
+            }
+         };
+         })(jQuery);
+         
+         //make an array of geocode keys to avoid the overlimit error
+         var geoCodKeys = [
+                    'AIzaSyCF82XXUtT0vzMTcEPpTXvKQPr1keMNr_4',
+                    'AIzaSyAYPw6oFHktAMhQqp34PptnkDEdmXwC3s0',
+                    'AIzaSyAwd0OLvubYtKkEWwMe4Fe0DQpauX0pzlk',
+                    'AIzaSyDF3F09RkYcibDuTFaINrWFBOG7ilCsVL0',
+                    'AIzaSyC1dyD2kzPmZPmM4-oGYnIH_0x--0hVSY8'                   
+                ];
+         function addMarkers(addresses){
+            var data = JSON.parse(addresses);
+             $.each( data.locations, function(i, value) {
+                addMarker(value);
+             });
+             document.getElementById("progress").innerHTML = "Done.";
+         }
+         
+         function addMarker(address, queKey){
+         var key = jQuery.rand(geoCodKeys);
+         var url = 'https://maps.googleapis.com/maps/api/geocode/json?key='+key+'&address='+address+'&sensor=false';
+         
+         var qyName = '';
+         if( queKey ) {
+            qyName = queKey;
+         } else {
+            qyName = 'MyQueue'+queuCounter;
+         }
+         
+         $.ajaxq (qyName, {
+            url: url,
+            dataType: 'json'
+         }).done(function( data ) {
+                    var address = getParameterByName('address', this.url);
+                    var index = errorArray.indexOf(address);
+                    try{
+                        var p = data.results[0].geometry.location;
+                        var latlng = new google.maps.LatLng(p.lat, p.lng);
+                        new google.maps.Marker({
+                            position: latlng,
+                            map: map
+                        });
+                        totalAddedMarkers ++;
+                        $("#totalAddedMarker").text(totalAddedMarkers);
+            //update adde marker count
+                        if (index > -1) {
+                            errorArray.splice(index, 1);
+                        }
+                    }catch(e){
+                        if(data.status = 'ZERO_RESULTS')
+                            return false;
+                        
+            //on error call add marker function for same address
+            //and keep in Error ajax queue
+                        addMarker( address, 'Errror' );
+                        if (index == -1) {
+                            errorArray.push( address );
+                        }
+                    }
+         });
+         
+         //mentain ajax queue set
+         queuCounter++;
+         if( queuCounter == setLimit ){
+            queuCounter = 0;
+         }
+         }
+         
+         //function get url parameter from url string
+         getParameterByName = function ( name,href )
+         {
+         name = name.replace(/[\[]/,"\\\[").replace(/[\]]/,"\\\]");
+         var regexS = "[\\?&]"+name+"=([^&#]*)";
+         var regex = new RegExp( regexS );
+         var results = regex.exec( href );
+         if( results == null )
+         return "";
+         else
+         return decodeURIComponent(results[1].replace(/\+/g, " "));
+         }
+         
+         function openFile(event) {
+             var input = event.target;
+         
+             var reader = new FileReader();
+             reader.onload = function(){
+                var text = reader.result;
+                document.getElementById("progress").innerHTML = "In Progress.";
+                $.ajax({
+                     type: "POST",
+                     url: "/geolocations",
+                     data: text,
+                     success: function(text){addMarkers(text)},
+                     dataType: "text"
+                });
+         
+                 <!--addMarkers(text)-->
+             };
+             reader.readAsText(input.files[0]);
+         };
+         
+         
+      </script>
+   </body>
+</html>
